@@ -612,7 +612,10 @@ func lexSubPath(l *lexer) stateFn {
 		childName := false
 		for {
 			le := l.next()
-			if le == '.' || le == '[' || le == ']' || le == ')' || le == ' ' || le == '&' || le == '|' || le == '=' || le == '!' || le == '>' || le == '<' || le == '~' || le == eof {
+			if le == '.' || le == '[' || le == ']' || le == ')' ||
+				le == ' ' || le == '&' || le == '|' || le == '=' ||
+				le == '!' || le == '>' || le == '<' || le == '~' ||
+				le == eof {
 				l.backup()
 				break
 			}

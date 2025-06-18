@@ -240,6 +240,7 @@ func typedValueOfNode(node *yaml.Node) typedValue {
 	}
 }
 
+//nolint:unused
 func newTypedValue(t valueType, v string) typedValue {
 	return typedValue{
 		typ: t,
@@ -247,14 +248,17 @@ func newTypedValue(t valueType, v string) typedValue {
 	}
 }
 
+//nolint:unused
 func typedValueOfString(s string) typedValue {
 	return newTypedValue(stringValueType, s)
 }
 
+//nolint:unused
 func typedValueOfInt(i string) typedValue {
 	return newTypedValue(intValueType, i)
 }
 
+//nolint:unused
 func typedValueOfFloat(f string) typedValue {
 	return newTypedValue(floatValueType, f)
 }

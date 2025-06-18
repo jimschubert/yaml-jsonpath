@@ -180,12 +180,6 @@ Run the tests as usual:
 go test ./...
 ```
 
-Check linting (so you don't get caught out by CI), after installing [golangci-lint](https://golangci-lint.run/):
-
-```sh
-./scripts/check-lint.sh
-```
-
 Fuzzing is also [available](./pkg/yamlpath/fuzz/README.md).
 
 ## Contributing

@@ -3,6 +3,8 @@ on:
       branches:
         - master
         - main
+      paths-ignore:
+        - '*.md'
     pull_request:
       branches:
         - master
@@ -23,13 +25,9 @@ jobs:
           go-version-file: go.mod
         id: go
 
-#      - name: Install golangci-lint
-#        run: |
-#          go get github.com/golangci/golangci-lint/cmd/golangci-lint
-#      - name: Run linters
-#        run: |
-#          export PATH=$PATH:$(go env GOPATH)/bin
-#          ./scripts/check-lint.sh
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+
   test:
     strategy:
       matrix:
