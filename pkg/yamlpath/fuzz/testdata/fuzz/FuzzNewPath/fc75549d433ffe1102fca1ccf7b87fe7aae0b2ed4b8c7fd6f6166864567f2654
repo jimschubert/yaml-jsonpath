@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\\\\\"\\\"\\\"\\\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\"\\\\\"\\\"\"_yaml_PARSE_B\x03\xbd\xbf\xef_NODE_OR_INDENTLESS_SEQUENCh_STATE\"\\\"\\\"\\\"\\\"\\\"")

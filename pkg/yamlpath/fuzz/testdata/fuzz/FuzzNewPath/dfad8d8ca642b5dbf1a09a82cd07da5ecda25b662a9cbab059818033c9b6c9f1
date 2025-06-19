@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/(?P<]invalid length of a UTF-8 sequence/")

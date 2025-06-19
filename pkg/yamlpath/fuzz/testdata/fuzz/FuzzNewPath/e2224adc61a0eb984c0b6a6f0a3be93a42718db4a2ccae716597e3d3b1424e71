@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\x01le.*.lecle\x10*.le.*.storele.*.lecle\x10*.le.*.store.\xff\x7f.\xff\x7f\xff\xffcleild1'B*\n")

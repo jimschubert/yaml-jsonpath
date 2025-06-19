@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/[[?(2\x00720d:^ascild name or ary aces or filter msing aftr ecursive dscenti:]/")

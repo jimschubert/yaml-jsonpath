@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[\",\"n\r\xa3\xf5%{\nk,w\"can\x80\x01ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_naln\x01ng an ac\x00 or\"]")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.d=='oney\x00\x00\x00@Pnewline in input does not match formatARSE_BLOCK_SEQUENCE_ENTRY_STATE')]")

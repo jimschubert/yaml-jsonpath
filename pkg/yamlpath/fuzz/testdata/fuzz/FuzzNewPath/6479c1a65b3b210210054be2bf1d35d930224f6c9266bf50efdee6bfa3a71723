@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.d=~/m^|a^|a^|a^|t^|t^|a^|t^|a^|t^|t^|a^|a^|a^|t^|t^|a^|a^|a^|m^|a^|a^|a^|t^|t^|a^|a^|a^|m^|a^|a^|t^|t^/")

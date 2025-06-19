@@ -159,7 +159,7 @@ Comparison expressions are built from existence and/or comparison filters using 
 
 ## Trying it out
 
-See the [web application](./web/README.md) provided in this repository.
+See the [web application](cmd/web/README.md) provided in this repository.
 
 ## References
 

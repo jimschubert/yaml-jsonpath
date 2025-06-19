@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@=~/\\\\\\A\\/\\\\\\A\\/AhA\\A\\A\\\x00\xffA\\A\\A\\\x05\xff\xff\x05\x7f\xffA\\A\\A\\A\\A\\AA\\\x00\x04A\\\\A\\A\\A\\A\\A\\A\\A\\A\\A\\A/")

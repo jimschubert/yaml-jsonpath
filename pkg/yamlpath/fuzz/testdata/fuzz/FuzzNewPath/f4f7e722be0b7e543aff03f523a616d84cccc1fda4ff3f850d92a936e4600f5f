@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("$[?(@.child<=1.5)]\n")

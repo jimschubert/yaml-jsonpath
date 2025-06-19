@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("['one'\x8f\xa9y\xc6|\xe0\x04Z\xa0\x8d\xab,'three']")

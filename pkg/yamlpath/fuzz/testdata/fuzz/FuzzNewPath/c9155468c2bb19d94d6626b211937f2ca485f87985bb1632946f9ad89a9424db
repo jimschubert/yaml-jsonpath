@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[''\xab,\xda,\x89,\xab,\xab']")

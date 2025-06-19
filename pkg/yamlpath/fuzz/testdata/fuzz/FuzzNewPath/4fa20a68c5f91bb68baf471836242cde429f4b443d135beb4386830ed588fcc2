@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/[regular expression does not start\x88\xb4\xf0\xdaf\xab\xd1 with %s[x\xbd\x01\x00j='hello.*/")

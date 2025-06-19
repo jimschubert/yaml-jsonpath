@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("['      \t          \t          \t          \t          \t    \t            \xf1\x86\x8a\xf1")

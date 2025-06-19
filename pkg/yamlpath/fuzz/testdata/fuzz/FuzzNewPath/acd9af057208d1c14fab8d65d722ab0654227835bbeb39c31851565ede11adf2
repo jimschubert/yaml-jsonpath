@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("$[?(@.key<3),?(@.key>6)]\n")

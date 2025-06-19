@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/@yaml_PARSE_IMPLICIT_DOCUMalias value must contain alphanumerical characters onlyENT_START_STATE.o.ex*@.e/")

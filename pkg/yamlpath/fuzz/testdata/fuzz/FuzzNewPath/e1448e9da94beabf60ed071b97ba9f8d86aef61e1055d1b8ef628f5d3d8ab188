@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("ClassAnyCharNotNLAnyCharBeginLineEndLinEndLineBeginTextEndTextW\\\f.pextEndTetureStarPlusQuesdLineBeginTextE\xd2dTexeBeginTextEndTextW\\\f.tureStarPlusQuesdLineBeginTexLineEndLinEndLineBeginTextEndTextW\\\f.pextEndTetureStarPlusQuesdLineBeginTextE\xd2dTexeBeginTextEndTextW\\\f.BoundaryNoWordBoundaryCaptureStarPlusQuesdLineBeginTextEndTextW\\W")

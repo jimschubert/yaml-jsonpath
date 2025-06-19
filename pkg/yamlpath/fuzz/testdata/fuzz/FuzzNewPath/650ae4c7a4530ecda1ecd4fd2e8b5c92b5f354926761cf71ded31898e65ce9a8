@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/(?i:  | ||  | |  |.|.y| | e||e || ||ee|e|| e| ||en||  | || e| ||ee|e|| e| ||e|| e| || ||ee|e|| e| ||en|| e  | e| |/")

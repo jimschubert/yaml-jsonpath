@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[_hQR2__kGJ1a94j==\a)]")

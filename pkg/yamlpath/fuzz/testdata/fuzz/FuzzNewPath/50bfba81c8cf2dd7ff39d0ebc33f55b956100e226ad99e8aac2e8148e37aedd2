@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("W\\extEndTextW\\TextEnd\x00extW\\\\\\\x00#\\\\\\'eat\"\\\"o\\W\\D\x13\x01\x00#\\mdTextWnTextEndT\x04\x00tW\\\\n\\\\'eat\"\\\"o\\W\\D\x13\x01\x00#\\nTextEn%mndTextWnTextEndT\x04\x00tW\\\"\\\"o\\dBo\xfcn\\\"\\'estRepetRepe")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.d=~/[could not find expected directive name:^asci[(@:]/")

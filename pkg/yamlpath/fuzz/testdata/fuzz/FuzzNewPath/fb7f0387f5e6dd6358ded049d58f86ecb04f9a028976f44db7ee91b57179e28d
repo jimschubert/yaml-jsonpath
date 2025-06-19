@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/heklo.\x00\x03\x15*�/")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[\",\",wscann\x01nann\x01ng an anchor\"]")

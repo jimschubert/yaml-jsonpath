@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@=~/[[:[:[:5319014[:[[:scing a quoted sca[:[:[:555821153d\x00\x00\x02\x00ot a[:[:[:0 a quote555821153d\x00\x00\x02\x00ot find expecte124did ',' or ']'0d\x0000000:0/")

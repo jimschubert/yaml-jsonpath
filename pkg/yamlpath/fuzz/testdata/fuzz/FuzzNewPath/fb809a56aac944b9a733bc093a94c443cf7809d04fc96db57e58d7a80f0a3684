@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/(?i:\\D\\D\\D\\D\\W\\W\\D\\W\\D/")

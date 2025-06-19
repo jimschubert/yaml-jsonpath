@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("..chil\x1dP\xc5152535455L6575859ound unmnown directive name")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("['one'w\xa9y\x04\x00\xe0JZ\x00\xe0\x04Z\xa0\x8d248227241983917296\t\xab,'thr{nvalid or unsupported Per\xff\x7fsyntaxee']")

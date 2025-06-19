@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("\xff\\xt\x01\\\"\\rdBa[''ͫ,ͫ,\xab'\xab\xbd\xab\x16\xefundaryNoWordBoundar\x00yC�\b\x01\x00Sta\xf7t\xeb7\xff\xff@!rPlusQuestRepeatConcatAlt\\bnw")

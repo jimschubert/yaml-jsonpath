@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/u46ee'd missing first operand for binary operator ||81446ee'd /")

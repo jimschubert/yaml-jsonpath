@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.A=~/[\\PL\\PL\\\\PL{1}s{1}sPL\\PPPL\\PL\\PL\\PL\\PL\\PL]/")

@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/152535455L6575859ound uomnown directive name")

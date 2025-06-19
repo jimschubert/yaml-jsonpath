@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[?(@.e=~/\\Q�PLICIT_DOCUMalias value must contain alphanumerical characters onlyEN _START_STATE.o.ex*@.e/")

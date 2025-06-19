@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("alCharClassAnyCharNotNLAnyCharBeginLineEndLineBeginTextEndTextW\x03\".daryNoWordBoundaryCaptureStarPlusQuesdLineBeginTextEndTextW-0x0dd.ordBoundary\x00dtordBoundaryCaptureStarPlusQuestRepetRepeatConcatAlW")
