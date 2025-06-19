@@ -61,5 +61,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Get Cache Directory
+        run: echo "FUZZ_CACHE=$(go env GOCACHE)/fuzz" >> $GITHUB_ENV
+
+      - name: Cache generated corpus
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.FUZZ_CACHE }}
+          key: fuzz-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            fuzz-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
+
       - name: Call the Fuzz
         run: go test -v -fuzz=FuzzNewPath -fuzztime=30s ./pkg/yamlpath/fuzz
