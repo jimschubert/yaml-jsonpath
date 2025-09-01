@@ -22,7 +22,6 @@ func TestNewFilter(t *testing.T) {
 		yamlDoc   string
 		rootDoc   string
 		match     bool
-		focus     bool // if true, run only tests with focus set to true
 	}{
 		{
 			name:      "no lexemes",
@@ -725,18 +724,7 @@ price: 8.95
 		},
 	}
 
-	focussed := false
 	for _, tc := range cases {
-		if tc.focus {
-			focussed = true
-			break
-		}
-	}
-
-	for _, tc := range cases {
-		if focussed && !tc.focus {
-			continue
-		}
 		t.Run(tc.name, func(t *testing.T) {
 			n := unmarshalDoc(t, tc.yamlDoc)
 			root := unmarshalDoc(t, tc.rootDoc)
@@ -746,9 +734,42 @@ price: 8.95
 			require.Equal(t, tc.match, match)
 		})
 	}
+}
 
-	if focussed {
-		t.Fatalf("testcase(s) still focussed")
+func TestAnchoredAliasedScalars(t *testing.T) {
+	cases := []struct {
+		name   string
+		doc    string
+		filter string
+		match  bool
+	}{
+		{
+			name: "string anchor equality via alias",
+			doc: `---
+a: &anchored 'x'
+b: *anchored
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+		{
+			name: "numeric anchor equality via alias",
+			doc: `---
+a: &one 1
+b: *one
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := unmarshalDoc(t, tc.doc)
+
+			match := newFilter(parseFilterString(tc.filter))(n, unmarshalDoc(t, ""))
+			require.True(t, match)
+		})
 	}
 }
 
