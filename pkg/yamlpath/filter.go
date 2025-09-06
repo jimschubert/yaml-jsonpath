@@ -1,9 +1,3 @@
-/*
- * Copyright 2020 VMware, Inc.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 package yamlpath
 
 import (
@@ -12,10 +6,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath/internal"
 	"go.yaml.in/yaml/v3"
 )
 
-type filter func(node, root *yaml.Node) bool
+type filter func(c *internal.Cursor) bool
 
 func newFilter(n *filterNode) filter {
 	if n == nil {
@@ -25,8 +20,8 @@ func newFilter(n *filterNode) filter {
 	switch n.lexeme.typ {
 	case lexemeFilterAt, lexemeRoot:
 		path := pathFilterScanner(n)
-		return func(node, root *yaml.Node) bool {
-			return len(path(node, root)) > 0
+		return func(c *internal.Cursor) bool {
+			return len(path(c)) > 0
 		}
 
 	case lexemeFilterEquality, lexemeFilterInequality,
@@ -39,22 +34,22 @@ func newFilter(n *filterNode) filter {
 
 	case lexemeFilterNot:
 		f := newFilter(n.children[0])
-		return func(node, root *yaml.Node) bool {
-			return !f(node, root)
+		return func(c *internal.Cursor) bool {
+			return !f(c)
 		}
 
 	case lexemeFilterOr:
 		f1 := newFilter(n.children[0])
 		f2 := newFilter(n.children[1])
-		return func(node, root *yaml.Node) bool {
-			return f1(node, root) || f2(node, root)
+		return func(c *internal.Cursor) bool {
+			return f1(c) || f2(c)
 		}
 
 	case lexemeFilterAnd:
 		f1 := newFilter(n.children[0])
 		f2 := newFilter(n.children[1])
-		return func(node, root *yaml.Node) bool {
-			return f1(node, root) && f2(node, root)
+		return func(c *internal.Cursor) bool {
+			return f1(c) && f2(c)
 		}
 
 	case lexemeFilterBooleanLiteral:
@@ -62,7 +57,7 @@ func newFilter(n *filterNode) filter {
 		if err != nil {
 			panic(err) // should not happen
 		}
-		return func(node, root *yaml.Node) bool {
+		return func(c *internal.Cursor) bool {
 			return b
 		}
 
@@ -71,7 +66,7 @@ func newFilter(n *filterNode) filter {
 	}
 }
 
-func never(node, root *yaml.Node) bool {
+func never(_ *internal.Cursor) bool {
 	return false
 }
 
@@ -105,11 +100,11 @@ func comparisonFilter(n *filterNode) filter {
 func nodeToFilter(n *filterNode, accept func(typedValue, typedValue) bool) filter {
 	lhsPath := newFilterScanner(n.children[0])
 	rhsPath := newFilterScanner(n.children[1])
-	return func(node, root *yaml.Node) (result bool) {
+	return func(c *internal.Cursor) (result bool) {
 		// perform a set-wise comparison of the values in each path
 		match := false
-		for _, l := range lhsPath(node, root) {
-			for _, r := range rhsPath(node, root) {
+		for _, l := range lhsPath(c) {
+			for _, r := range rhsPath(c) {
 				if !accept(l, r) {
 					return false
 				}
@@ -132,9 +127,9 @@ func equalNulls(l, r string) bool {
 
 // filterScanner is a function that returns a slice of typed values from either a filter literal or a path expression
 // which refers to either the current node or the root node. It is used in filter comparisons.
-type filterScanner func(node, root *yaml.Node) []typedValue
+type filterScanner func(c *internal.Cursor) []typedValue
 
-func emptyScanner(*yaml.Node, *yaml.Node) []typedValue {
+func emptyScanner(_ *internal.Cursor) []typedValue {
 	return []typedValue{}
 }
 
@@ -172,11 +167,11 @@ func pathFilterScanner(n *filterNode) filterScanner {
 	if err != nil {
 		return emptyScanner
 	}
-	return func(node, root *yaml.Node) []typedValue {
+	return func(c *internal.Cursor) []typedValue {
 		if at {
-			return values(path.Find(node))
+			return values(path.Find(c.Node()))
 		}
-		return values(path.Find(root))
+		return values(path.Find(c.Root().Node()))
 	}
 }
 
@@ -278,7 +273,7 @@ func values(nodes []*yaml.Node, err error) []typedValue {
 
 func literalFilterScanner(n *filterNode) filterScanner {
 	v := n.lexeme.literalValue()
-	return func(node, root *yaml.Node) []typedValue {
+	return func(_ *internal.Cursor) []typedValue {
 		return []typedValue{v}
 	}
 }

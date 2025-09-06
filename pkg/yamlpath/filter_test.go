@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath/internal"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -730,7 +731,8 @@ price: 8.95
 			root := unmarshalDoc(t, tc.rootDoc)
 
 			parseTree := parseFilterString(tc.filter)
-			match := newFilter(parseTree)(n, root)
+			c := internal.NewCursor(n, internal.NewCursor(root, nil))
+			match := newFilter(parseTree)(c)
 			require.Equal(t, tc.match, match)
 		})
 	}
@@ -767,7 +769,9 @@ b: *one
 		t.Run(tc.name, func(t *testing.T) {
 			n := unmarshalDoc(t, tc.doc)
 
-			match := newFilter(parseFilterString(tc.filter))(n, unmarshalDoc(t, ""))
+			rootCursor := internal.NewCursor(unmarshalDoc(t, ""), nil)
+			cursor := internal.NewCursor(n, rootCursor)
+			match := newFilter(parseFilterString(tc.filter))(cursor)
 			require.True(t, match)
 		})
 	}

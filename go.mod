@@ -1,13 +1,13 @@
 module github.com/vmware-labs/yaml-jsonpath
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.24.3
 
 require (
 	github.com/sergi/go-diff v1.4.0
-	github.com/stretchr/testify v1.10.0
-	go.yaml.in/yaml/v3 v3.0.3
+	github.com/stretchr/testify v1.11.1
+	go.yaml.in/yaml/v3 v3.0.4
 )
 
 require (

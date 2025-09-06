@@ -489,17 +489,16 @@ func filterThen(filterLexemes []lexeme, p *Path) *Path {
 	f := newFilter(newFilterNode(filterLexemes))
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 		node := c.Node()
-		r := c.Root().Node()
 		its := []iter.Seq[*internal.Cursor]{}
 		if node.Kind == yaml.SequenceNode {
 			for _, content := range node.Content {
-				if f(content, r) {
-					childCursor := internal.NewCursor(content, c)
+				childCursor := internal.NewCursor(content, c)
+				if f(childCursor) {
 					its = append(its, compose(lift(childCursor), p))
 				}
 			}
 		} else {
-			if f(node, r) {
+			if f(c) {
 				childCursor := internal.NewCursor(node, c)
 				its = append(its, compose(lift(childCursor), p))
 			}
@@ -512,10 +511,9 @@ func recursiveFilterThen(filterLexemes []lexeme, p *Path) *Path {
 	f := newFilter(newFilterNode(filterLexemes))
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 		node := c.Node()
-		root := c.Root().Node()
 		its := []iter.Seq[*internal.Cursor]{}
 
-		if f(node, root) {
+		if f(c) {
 			childCursor := internal.NewCursor(node, c)
 			its = append(its, compose(lift(childCursor), p))
 		}
