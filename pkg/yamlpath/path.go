@@ -208,7 +208,94 @@ func identity(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 }
 
 func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
-	return slices.Values(cursors)
+	resolved := make([]*internal.Cursor, 0, len(cursors))
+
+	for _, cur := range cursors {
+		if cur == nil || cur.Node() == nil {
+			continue
+		}
+		node := cur.Node()
+
+		// Resolve alias chains
+		if node.Kind == yaml.AliasNode {
+			if aliases := cur.Root().Aliases(); aliases != nil {
+				if anchored, ok := aliases[node.Value]; ok && anchored != nil {
+					for anchored.Kind == yaml.AliasNode {
+						if next, ok := aliases[anchored.Value]; ok && next != nil {
+							anchored = next
+						} else {
+							break
+						}
+					}
+					cur = internal.NewCursor(anchored, cur.Parent())
+					node = cur.Node()
+				}
+			}
+		}
+
+		// Normalize merge key '<<' by selecting a mapping source (resolve alias/sequence cases)
+		if node.Kind == yaml.MappingNode && len(node.Content) > 0 {
+			for j := 0; j < len(node.Content); j += 2 {
+				if node.Content[j].Value != "<<" {
+					continue
+				}
+				mergeNode := node.Content[j+1]
+				aliases := cur.Root().Aliases()
+
+				// merge is an alias -> resolve via alias map
+				if mergeNode.Kind == yaml.AliasNode && aliases != nil {
+					if anchored, ok := aliases[mergeNode.Value]; ok && anchored != nil {
+						for anchored.Kind == yaml.AliasNode {
+							if next, ok := aliases[anchored.Value]; ok && next != nil {
+								anchored = next
+							} else {
+								break
+							}
+						}
+						if anchored.Kind == yaml.MappingNode {
+							cur = internal.NewCursor(anchored, cur.Parent())
+							node = cur.Node()
+							break
+						}
+					}
+					continue
+				}
+
+				// merge is a sequence -> pick first mapping-like source (resolve aliases inside)
+				if mergeNode.Kind == yaml.SequenceNode {
+					var chosen *yaml.Node
+					for _, item := range mergeNode.Content {
+						if item.Kind == yaml.AliasNode && aliases != nil {
+							if a, ok := aliases[item.Value]; ok && a != nil && a.Kind == yaml.MappingNode {
+								chosen = a
+								break
+							}
+						} else if item.Kind == yaml.MappingNode {
+							chosen = item
+							break
+						}
+					}
+					if chosen != nil {
+						cur = internal.NewCursor(chosen, cur.Parent())
+						node = cur.Node()
+						break
+					}
+					continue
+				}
+
+				// merge is directly a mapping node
+				if mergeNode.Kind == yaml.MappingNode {
+					cur = internal.NewCursor(mergeNode, cur.Parent())
+					node = cur.Node()
+					break
+				}
+			}
+		}
+
+		resolved = append(resolved, cur)
+	}
+
+	return slices.Values(resolved)
 }
 
 func empty() iter.Seq[*internal.Cursor] {
@@ -530,6 +617,7 @@ func mapCursors(nodes []*yaml.Node, parent *internal.Cursor) []*internal.Cursor 
 	return cursors
 }
 
+// recurse: descend into a mapping child by name, producing child cursors.
 func recurse(i ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 	return func(yield func(*internal.Cursor) bool) {
 		for _, n := range i {

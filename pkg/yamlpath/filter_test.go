@@ -777,6 +777,65 @@ b: *one
 	}
 }
 
+func TestFilterTraversesAnchorsAndAliases(t *testing.T) {
+	cases := []struct {
+		name   string
+		doc    string
+		filter string
+		match  bool
+	}{
+		{
+			name: "alias references anchored string",
+			doc: `
+a: &str_anchor hello
+b: *str_anchor
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+		{
+			name: "alias references anchored int",
+			doc: `
+x: &int_anchor 42
+y: *int_anchor
+`,
+			filter: `@.x==@.y`,
+			match:  true,
+		},
+		{
+			name: "alias does not match different anchor",
+			doc: `
+a: &one 1
+b: &two 2
+c: *one
+d: *two
+`,
+			filter: `@.c==@.d`,
+			match:  false,
+		},
+		{
+			name: "alias in sequence matches anchor",
+			doc: `
+seq:
+  - &anchored foo
+  - *anchored
+`,
+			filter: `@.seq[0]==@.seq[1]`,
+			match:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := unmarshalDoc(t, tc.doc)
+			rootCursor := internal.NewCursor(unmarshalDoc(t, ""), nil)
+			cursor := internal.NewCursor(n, rootCursor)
+			match := newFilter(parseFilterString(tc.filter))(cursor)
+			require.Equal(t, tc.match, match)
+		})
+	}
+}
+
 func unmarshalDoc(t *testing.T, doc string) *yaml.Node {
 	var n yaml.Node
 	err := yaml.Unmarshal([]byte(doc), &n)

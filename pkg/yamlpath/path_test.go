@@ -1202,3 +1202,75 @@ another: entry`,
 		t.Fatalf("testcase(s) still focussed")
 	}
 }
+
+func TestFindAnchorsAndAliases(t *testing.T) {
+	cases := []struct {
+		name            string
+		input           string
+		path            string
+		expectedStrings []string
+	}{
+		{
+			name: "simple alias resolution",
+			input: `
+a: &anchor
+  value: 42
+b: *anchor
+`,
+			path:            "$.b.value",
+			expectedStrings: []string{"42\n"},
+		},
+		{
+			name: "alias inside sequence",
+			input: `
+defaults: &defaults
+  color: red
+items:
+  - name: item1
+    <<: *defaults
+  - name: item2
+    color: blue
+`,
+			path:            "$.items[0].color",
+			expectedStrings: []string{"red\n"},
+		},
+		{
+			name: "recursive alias reference",
+			input: `
+foo: &foo
+  bar: &bar
+    baz: 123
+ref: *foo
+`,
+			path:            "$.ref.bar.baz",
+			expectedStrings: []string{"123\n"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var n yaml.Node
+			err := yaml.Unmarshal([]byte(tc.input), &n)
+			require.NoError(t, err)
+
+			p, err := yamlpath.NewPath(tc.path)
+			require.NoError(t, err)
+
+			actual, err := p.Find(&n)
+			require.NoError(t, err)
+
+			actualStrings := []string{}
+			for _, a := range actual {
+				var buf bytes.Buffer
+				e := yaml.NewEncoder(&buf)
+				e.SetIndent(2)
+				err = e.Encode(a)
+				require.NoError(t, err)
+				e.Close()
+				actualStrings = append(actualStrings, buf.String())
+			}
+
+			require.Equal(t, tc.expectedStrings, actualStrings)
+		})
+	}
+}
