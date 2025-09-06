@@ -46,8 +46,8 @@ func (c *Cursor) Root() *Cursor {
 
 // Aliases returns the alias map from the root cursor.
 func (c *Cursor) Aliases() map[string]*yaml.Node {
-	if c.root != nil {
-		aliases, _ := c.aliases.GetAllAliases(c.hashAtCreation)
+	if c.root != nil && c.root.aliases != nil {
+		aliases, _ := c.root.aliases.GetAllAliases(c.root.hashAtCreation)
 		return aliases
 	}
 	return nil

@@ -169,9 +169,11 @@ func pathFilterScanner(n *filterNode) filterScanner {
 	}
 	return func(c *internal.Cursor) []typedValue {
 		if at {
-			return values(path.Find(c.Node()))
+			nodes, err := path.Find(c.Node())
+			return values(c, nodes, err)
 		}
-		return values(path.Find(c.Root().Node()))
+		nodes, err := path.Find(c.Root().Node())
+		return values(c, nodes, err)
 	}
 }
 
@@ -237,36 +239,45 @@ func typedValueOfNode(node *yaml.Node) typedValue {
 	}
 }
 
-//nolint:unused
-func newTypedValue(t valueType, v string) typedValue {
-	return typedValue{
-		typ: t,
-		val: v,
+// resolveAliasNode resolves alias nodes using the node's Alias pointer if present,
+// otherwise falls back to looking up anchors on the cursor's root alias map.
+// It follows alias chains up to a cap to avoid infinite loops.
+func resolveAliasNode(c *internal.Cursor, n *yaml.Node) *yaml.Node {
+	cur := n
+	const maxDepth = 16
+	for i := 0; cur != nil && cur.Kind == yaml.AliasNode && i < maxDepth; i++ {
+		if cur.Alias != nil {
+			cur = cur.Alias
+			continue
+		}
+		aliases := c.Aliases()
+		if aliases != nil {
+			if anchored, ok := aliases[cur.Value]; ok && anchored != nil {
+				cur = anchored
+				continue
+			}
+		}
+		// cannot resolve further
+		break
 	}
+	return cur
 }
 
-//nolint:unused
-func typedValueOfString(s string) typedValue {
-	return newTypedValue(stringValueType, s)
-}
-
-//nolint:unused
-func typedValueOfInt(i string) typedValue {
-	return newTypedValue(intValueType, i)
-}
-
-//nolint:unused
-func typedValueOfFloat(f string) typedValue {
-	return newTypedValue(floatValueType, f)
-}
-
-func values(nodes []*yaml.Node, err error) []typedValue {
+// values now accepts the cursor so alias resolution can consult the root's alias map.
+func values(c *internal.Cursor, nodes []*yaml.Node, err error) []typedValue {
 	if err != nil {
 		panic(fmt.Errorf("unexpected error: %v", err)) // should never happen
 	}
 	v := []typedValue{}
 	for _, n := range nodes {
-		v = append(v, typedValueOfNode(n))
+		if n == nil {
+			continue
+		}
+		resolved := resolveAliasNode(c, n)
+		if resolved == nil {
+			continue
+		}
+		v = append(v, typedValueOfNode(resolved))
 	}
 	return v
 }
