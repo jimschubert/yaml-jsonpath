@@ -1245,6 +1245,20 @@ ref: *foo
 			path:            "$.ref.bar.baz",
 			expectedStrings: []string{"123\n"},
 		},
+		{
+			name: "three deep alias chain resolves value",
+			input: `
+a: &base
+  key: value
+b: &b
+  <<: *base
+c: &c
+  <<: *b
+d: *c
+`,
+			path:            `$.d.key`,
+			expectedStrings: []string{"value\n"},
+		},
 	}
 
 	for _, tc := range cases {

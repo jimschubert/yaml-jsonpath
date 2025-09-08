@@ -823,6 +823,20 @@ seq:
 			filter: `@.seq[0]==@.seq[1]`,
 			match:  true,
 		},
+		{
+			name: "three deep alias chain resolves value",
+			doc: `
+a: &base
+  key: value
+b: &b
+  <<: *base
+c: &c
+  <<: *b
+d: *c
+`,
+			filter: `@.a.key==@.d.key`,
+			match:  true,
+		},
 	}
 
 	for _, tc := range cases {

@@ -3,6 +3,7 @@ package internal
 import (
 	"crypto/sha256"
 	"fmt"
+	"hash/fnv"
 	"runtime"
 	"sync"
 	"weak"
@@ -32,11 +33,7 @@ func (c *YAMLCache) Store(node *yaml.Node) (string, error) {
 		Aliases: make(map[string]*yaml.Node),
 	}
 	c.extractAliases(node, newDoc.Aliases)
-	content, err := yaml.Marshal(node)
-	if err != nil {
-		return "", err
-	}
-	key := hashContent(content)
+	key := hashYAMLNode(node)
 	c.documents.Store(key, weak.Make(newDoc))
 	return key, nil
 }
@@ -197,4 +194,27 @@ func (c *YAMLCache) CleanStaleEntries() int {
 func hashContent(content []byte) string {
 	hash := sha256.Sum256(content)
 	return fmt.Sprintf("%x", hash[:8]) // Use first 8 bytes for brevity
+}
+
+// hashYAMLNode creates a value-based non-structural hash for a YAML node
+// This is used to determine if a node has changed between two YAML documents
+// Returns a hex string of the hash
+func hashYAMLNode(node *yaml.Node) string {
+	h := fnv.New64a()
+	var walk func(n *yaml.Node)
+	walk = func(n *yaml.Node) {
+		if n.Kind == yaml.AliasNode && n.Alias != nil {
+			h.Write([]byte(n.Alias.Anchor))
+		} else {
+			h.Write([]byte(n.Value))
+			h.Write([]byte(n.Anchor))
+			for _, c := range n.Content {
+				walk(c)
+			}
+		}
+	}
+	walk(node)
+
+	sum := h.Sum64()
+	return fmt.Sprintf("%x", sum)
 }

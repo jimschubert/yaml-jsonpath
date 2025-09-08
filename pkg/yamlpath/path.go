@@ -41,17 +41,6 @@ func NewPath(path string) (*Path, error) {
 	return newPathFromLexer(lex("Path lexer", path))
 }
 
-// NewPathWithRoot constructs a Path from a string expression, providing a root node to use for anchor/alias resolution.
-func NewPathWithRoot(path string, root *yaml.Node) (*Path, error) {
-	p, err := newPathFromLexer(lex("Path lexer", path))
-	if err != nil {
-		return nil, err
-	}
-	p.aliasCache = internal.NewYAMLCache()
-	p.rootCacheKey, err = p.aliasCache.Store(root)
-	return p, err
-}
-
 func newPathFromLexer(l *lexer) (*Path, error) {
 	lx := l.nextLexeme()
 
@@ -214,37 +203,24 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 		if cur == nil || cur.Node() == nil {
 			continue
 		}
-		node := cur.Node()
 
-		// Resolve alias chains
-		if node.Kind == yaml.AliasNode {
-			if aliases := cur.Root().Aliases(); aliases != nil {
-				if anchored, ok := aliases[node.Value]; ok && anchored != nil {
-					for anchored.Kind == yaml.AliasNode {
-						if next, ok := aliases[anchored.Value]; ok && next != nil {
-							anchored = next
-						} else {
-							break
-						}
-					}
-					cur = internal.NewCursor(anchored, cur.Parent())
-					node = cur.Node()
-				}
+		// Repeat resolution until no further alias/merge redirection occurs.
+		// Limit to a reasonable number of iterations to avoid infinite loops.
+		const maxIterations = 16
+		iteration := 0
+		for {
+			if iteration >= maxIterations {
+				break
 			}
-		}
+			iteration++
 
-		// Normalize merge key '<<' by selecting a mapping source (resolve alias/sequence cases)
-		if node.Kind == yaml.MappingNode && len(node.Content) > 0 {
-			for j := 0; j < len(node.Content); j += 2 {
-				if node.Content[j].Value != "<<" {
-					continue
-				}
-				mergeNode := node.Content[j+1]
-				aliases := cur.Root().Aliases()
+			node := cur.Node()
+			changed := false
 
-				// merge is an alias -> resolve via alias map
-				if mergeNode.Kind == yaml.AliasNode && aliases != nil {
-					if anchored, ok := aliases[mergeNode.Value]; ok && anchored != nil {
+			// Resolve alias chains
+			if node.Kind == yaml.AliasNode {
+				if aliases := cur.Root().Aliases(); aliases != nil {
+					if anchored, ok := aliases[node.Value]; ok && anchored != nil {
 						for anchored.Kind == yaml.AliasNode {
 							if next, ok := aliases[anchored.Value]; ok && next != nil {
 								anchored = next
@@ -252,43 +228,74 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 								break
 							}
 						}
-						if anchored.Kind == yaml.MappingNode {
-							cur = internal.NewCursor(anchored, cur.Parent())
-							node = cur.Node()
-							break
-						}
+						cur = internal.NewCursor(anchored, cur.Parent())
+						changed = true
+						// continue outer loop to re-evaluate the new node
 					}
-					continue
 				}
+			}
 
-				// merge is a sequence -> pick first mapping-like source (resolve aliases inside)
-				if mergeNode.Kind == yaml.SequenceNode {
-					var chosen *yaml.Node
-					for _, item := range mergeNode.Content {
-						if item.Kind == yaml.AliasNode && aliases != nil {
-							if a, ok := aliases[item.Value]; ok && a != nil && a.Kind == yaml.MappingNode {
-								chosen = a
+			// Normalize merge key '<<' by selecting a mapping source (resolve alias/sequence cases)
+			if !changed && node.Kind == yaml.MappingNode && len(node.Content) > 0 {
+				for j := 0; j < len(node.Content); j += 2 {
+					if node.Content[j].Value != "<<" {
+						continue
+					}
+					mergeNode := node.Content[j+1]
+					aliases := cur.Root().Aliases()
+
+					// merge is an alias -> resolve via alias map
+					if mergeNode.Kind == yaml.AliasNode && aliases != nil {
+						if anchored, ok := aliases[mergeNode.Value]; ok && anchored != nil {
+							for anchored.Kind == yaml.AliasNode {
+								if next, ok := aliases[anchored.Value]; ok && next != nil {
+									anchored = next
+								} else {
+									break
+								}
+							}
+							if anchored.Kind == yaml.MappingNode {
+								cur = internal.NewCursor(anchored, cur.Parent())
+								changed = true
 								break
 							}
-						} else if item.Kind == yaml.MappingNode {
-							chosen = item
+						}
+						continue
+					}
+
+					// merge is a sequence -> pick first mapping-like source (resolve aliases inside)
+					if mergeNode.Kind == yaml.SequenceNode {
+						var chosen *yaml.Node
+						for _, item := range mergeNode.Content {
+							if item.Kind == yaml.AliasNode && aliases != nil {
+								if a, ok := aliases[item.Value]; ok && a != nil && a.Kind == yaml.MappingNode {
+									chosen = a
+									break
+								}
+							} else if item.Kind == yaml.MappingNode {
+								chosen = item
+								break
+							}
+						}
+						if chosen != nil {
+							cur = internal.NewCursor(chosen, cur.Parent())
+							changed = true
 							break
 						}
+						continue
 					}
-					if chosen != nil {
-						cur = internal.NewCursor(chosen, cur.Parent())
-						node = cur.Node()
+
+					// merge is directly a mapping node
+					if mergeNode.Kind == yaml.MappingNode {
+						cur = internal.NewCursor(mergeNode, cur.Parent())
+						changed = true
 						break
 					}
-					continue
 				}
+			}
 
-				// merge is directly a mapping node
-				if mergeNode.Kind == yaml.MappingNode {
-					cur = internal.NewCursor(mergeNode, cur.Parent())
-					node = cur.Node()
-					break
-				}
+			if !changed {
+				break
 			}
 		}
 
