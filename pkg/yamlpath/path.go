@@ -41,6 +41,8 @@ func NewPath(path string) (*Path, error) {
 	return newPathFromLexer(lex("Path lexer", path))
 }
 
+// newPathFromLexer constructs a new Path using lexemes parsed from the given lexer.
+// It processes path tokens recursively and returns an error for invalid syntax.
 func newPathFromLexer(l *lexer) (*Path, error) {
 	lx := l.nextLexeme()
 
@@ -188,6 +190,7 @@ func newPathFromLexer(l *lexer) (*Path, error) {
 	return nil, errors.New("invalid path syntax")
 }
 
+// identity returns a sequence containing the provided cursor if its node is valid, otherwise returns an empty sequence.
 func identity(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 	n := c.Node()
 	if n.Kind == 0 {
@@ -196,6 +199,7 @@ func identity(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 	return lift(c)
 }
 
+// lift resolves and normalizes the provided cursors by evaluating aliases and merge keys, returning a sequence of results.
 func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 	resolved := make([]*internal.Cursor, 0, len(cursors))
 
@@ -305,10 +309,12 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 	return slices.Values(resolved)
 }
 
+// empty returns an empty sequence of *internal.Cursor, often used as a default or placeholder value.
 func empty() iter.Seq[*internal.Cursor] {
 	return lift()
 }
 
+// compose combines an initial sequence of cursors with a Path to produce a flattened sequence of processed cursors.
 func compose(i iter.Seq[*internal.Cursor], p *Path) iter.Seq[*internal.Cursor] {
 	its := []iter.Seq[*internal.Cursor]{}
 	for a := range i {
@@ -317,6 +323,8 @@ func compose(i iter.Seq[*internal.Cursor], p *Path) iter.Seq[*internal.Cursor] {
 	return flatten(its...)
 }
 
+// flatten combines multiple sequences of *internal.Cursor into a single sequence.
+// It iterates over each input sequence and yields their elements in order, flattening the structure.
 func flatten(i ...iter.Seq[*internal.Cursor]) iter.Seq[*internal.Cursor] {
 	return func(yield func(*internal.Cursor) bool) {
 		for _, next := range i {
@@ -327,11 +335,12 @@ func flatten(i ...iter.Seq[*internal.Cursor]) iter.Seq[*internal.Cursor] {
 	}
 }
 
+// chained returns a Path by wrapping a function to transform a Cursor into a sequence of Cursors.
 func chained(f func(c *internal.Cursor) iter.Seq[*internal.Cursor]) *Path {
 	return &Path{f: f}
 }
 
-// propertyNameChildThen: same as childThen but returns cursor for the property name node (key node).
+// propertyNameChildThen navigates to a mapping node's child with a specific key and applies the given Path on it.
 func propertyNameChildThen(childName string, p *Path) *Path {
 	childName = unescape(childName)
 
@@ -350,6 +359,7 @@ func propertyNameChildThen(childName string, p *Path) *Path {
 	})
 }
 
+// propertyNameBracketChildThen processes child names and updates a Path to match specific mapping node keys in YAML.
 func propertyNameBracketChildThen(childNames string, p *Path) *Path {
 	unquotedChildren := bracketChildNames(childNames)
 
@@ -372,6 +382,10 @@ func propertyNameBracketChildThen(childNames string, p *Path) *Path {
 	})
 }
 
+// propertyNameArraySubscriptThen performs a YAML path operation for a property array with a given subscript.
+// It generates a sequence of cursors based on child nodes matching the subscript.
+// If the subscript is "*", it applies the provided path to all matched child nodes.
+// Returns a chained path for further path operations.
 func propertyNameArraySubscriptThen(subscript string, p *Path) *Path {
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 		node := c.Node()
@@ -390,7 +404,7 @@ func propertyNameArraySubscriptThen(subscript string, p *Path) *Path {
 	})
 }
 
-// childThen: descend into a mapping child by name, producing child cursors.
+// childThen creates a Path that matches a child node with the specified name, applying the given Path to it.
 func childThen(childName string, p *Path) *Path {
 	if childName == "*" {
 		return allChildrenThen(p)
@@ -413,6 +427,7 @@ func childThen(childName string, p *Path) *Path {
 	})
 }
 
+// bracketChildNames parses a string of comma-separated, optionally quoted child names into a list of unescaped names.
 func bracketChildNames(childNames string) []string {
 	s := strings.Split(childNames, ",")
 	// reconstitute child names with embedded commas
@@ -454,6 +469,9 @@ func bracketChildNames(childNames string) []string {
 	return unquotedChildren
 }
 
+// balanced checks if the given rune `q` is balanced (opens and closes properly) in the provided string `c`.
+// Escaped quotes (preceded by a backslash) are ignored for balancing purposes.
+// Returns true if the quotes are balanced, otherwise false.
 func balanced(c string, q rune) bool {
 	bal := true
 	prev := eof
@@ -472,6 +490,7 @@ func balanced(c string, q rune) bool {
 	return bal
 }
 
+// bracketChildThen creates a Path to match specific child nodes in a YAML mapping node, processing their corresponding values.
 func bracketChildThen(childNames string, p *Path) *Path {
 	unquotedChildren := bracketChildNames(childNames)
 
@@ -493,7 +512,7 @@ func bracketChildThen(childNames string, p *Path) *Path {
 	})
 }
 
-// keep existing helper functions unescape, bracketChildNames, balanced, etc., unchanged.
+// unescape removes single backslashes unless they are escaping another backslash in the input string.
 func unescape(raw string) string {
 	esc := ""
 	escaped := false
@@ -514,7 +533,7 @@ func unescape(raw string) string {
 	return esc
 }
 
-// allChildrenThen: iterate mapping values or sequence elements, returning child cursors.
+// allChildrenThen returns a Path that applies the given Path to all child nodes of a YAML Mapping or Sequence node.
 func allChildrenThen(p *Path) *Path {
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 		node := c.Node()
@@ -543,7 +562,10 @@ func allChildrenThen(p *Path) *Path {
 	})
 }
 
-// arraySubscriptThen: slice/indices produce child cursors for sequence entries.
+// arraySubscriptThen applies a subscript and a subsequent Path to the sequence or mapping nodes in a YAML structure.
+// If the node is a mapping and the subscript is "*", all values in the mapping are selected.
+// For sequence nodes, the subscript is interpreted as an index or range selector.
+// Returns a Path that allows chained evaluation over the selected nodes.
 func arraySubscriptThen(subscript string, p *Path) *Path {
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 		node := c.Node()
@@ -579,6 +601,7 @@ func arraySubscriptThen(subscript string, p *Path) *Path {
 	})
 }
 
+// filterThen applies a filter defined by filterLexemes to a YAML node and chains it with the provided Path p.
 func filterThen(filterLexemes []lexeme, p *Path) *Path {
 	f := newFilter(newFilterNode(filterLexemes))
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
@@ -601,6 +624,7 @@ func filterThen(filterLexemes []lexeme, p *Path) *Path {
 	})
 }
 
+// recursiveFilterThen applies a filter and a path recursively to YAML nodes, returning a new compiled Path.
 func recursiveFilterThen(filterLexemes []lexeme, p *Path) *Path {
 	f := newFilter(newFilterNode(filterLexemes))
 	return chained(func(c *internal.Cursor) iter.Seq[*internal.Cursor] {
@@ -615,7 +639,7 @@ func recursiveFilterThen(filterLexemes []lexeme, p *Path) *Path {
 	})
 }
 
-// mapCursors converts []*yaml.Node to []*internal.Cursor with the given parent.
+// mapCursors creates a slice of cursors for the given YAML nodes, linking each to the provided parent cursor.
 func mapCursors(nodes []*yaml.Node, parent *internal.Cursor) []*internal.Cursor {
 	cursors := make([]*internal.Cursor, len(nodes))
 	for i, n := range nodes {
@@ -624,7 +648,7 @@ func mapCursors(nodes []*yaml.Node, parent *internal.Cursor) []*internal.Cursor 
 	return cursors
 }
 
-// recurse: descend into a mapping child by name, producing child cursors.
+// recurse traverses a sequence of cursors recursively and yields each cursor through the provided yield function.
 func recurse(i ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 	return func(yield func(*internal.Cursor) bool) {
 		for _, n := range i {
