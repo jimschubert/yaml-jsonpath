@@ -1288,3 +1288,87 @@ d: *c
 		})
 	}
 }
+
+func TestNewPathWithRoot_AliasResolution(t *testing.T) {
+	yamlData := `
+root: &shared
+  value: 42
+a: *shared
+b: *shared
+c:
+  nested: *shared
+`
+	var root yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &root))
+
+	// Path to 'a.value'
+	p1, err := yamlpath.NewPathWithRoot("$.a.value", &root)
+	require.NoError(t, err)
+	nodes1, err := p1.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes1, 1)
+	require.Equal(t, "42", nodes1[0].Value)
+
+	// Path to 'b.value'
+	p2, err := yamlpath.NewPathWithRoot("$.b.value", &root)
+	require.NoError(t, err)
+	nodes2, err := p2.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes2, 1)
+	require.Equal(t, "42", nodes2[0].Value)
+
+	// Path to 'c.nested.value'
+	p3, err := yamlpath.NewPathWithRoot("$.c.nested.value", &root)
+	require.NoError(t, err)
+	nodes3, err := p3.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes3, 1)
+	require.Equal(t, "42", nodes3[0].Value)
+}
+
+func TestFindOnChildNodesWithRoot(t *testing.T) {
+	yamlData := `
+root: &shared
+  value: 42
+a: *shared
+b: *shared
+c:
+  nested: *shared
+`
+	var root yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &root))
+
+	// Helper to find a mapping child by key
+	findChild := func(parent *yaml.Node, key string) *yaml.Node {
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				return parent.Content[i+1]
+			}
+		}
+		return nil
+	}
+
+	aNode := findChild(root.Content[0], "a")
+	bNode := findChild(root.Content[0], "b")
+	cNode := findChild(root.Content[0], "c")
+
+	p, err := yamlpath.NewPathWithRoot("$.value", &root)
+	require.NoError(t, err)
+
+	nodesA, err := p.Find(aNode)
+	require.NoError(t, err)
+	require.Len(t, nodesA, 1)
+	require.Equal(t, "42", nodesA[0].Value)
+
+	nodesB, err := p.Find(bNode)
+	require.NoError(t, err)
+	require.Len(t, nodesB, 1)
+	require.Equal(t, "42", nodesB[0].Value)
+
+	// For c.nested
+	nestedNode := findChild(cNode, "nested")
+	nodesC, err := p.Find(nestedNode)
+	require.NoError(t, err)
+	require.Len(t, nodesC, 1)
+	require.Equal(t, "42", nodesC[0].Value)
+}

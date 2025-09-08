@@ -19,15 +19,18 @@ import (
 
 // Path is a compiled YAML path expression.
 type Path struct {
-	f            func(c *internal.Cursor) iter.Seq[*internal.Cursor]
-	aliasCache   *internal.YAMLCache
-	rootCacheKey string
+	f    func(c *internal.Cursor) iter.Seq[*internal.Cursor]
+	root *yaml.Node
 }
 
 // Find applies the Path to a YAML node and returns the addresses of the subnodes which match the Path.
 func (p *Path) Find(node *yaml.Node) ([]*yaml.Node, error) {
-	// construct a root cursor (ensures alias map on root)
-	rootC := internal.NewCursor(node, nil)
+	var docCursor *internal.Cursor
+	if p.root != nil {
+		docCursor = internal.NewCursor(p.root, nil)
+	}
+
+	rootC := internal.NewCursor(node, docCursor)
 	cursors := slices.Collect(p.f(rootC))
 	out := make([]*yaml.Node, 0, len(cursors))
 	for _, c := range cursors {
@@ -41,8 +44,17 @@ func NewPath(path string) (*Path, error) {
 	return newPathFromLexer(lex("Path lexer", path))
 }
 
-// newPathFromLexer constructs a new Path using lexemes parsed from the given lexer.
-// It processes path tokens recursively and returns an error for invalid syntax.
+// NewPathWithRoot constructs a Path from a string expression, providing a root node to use for anchor/alias resolution.
+// Returns the compiled Path and any potential error encountered during parsing or initialization.
+func NewPathWithRoot(path string, root *yaml.Node) (*Path, error) {
+	p, err := newPathFromLexer(lex("Path lexer", path))
+	if err != nil {
+		return nil, err
+	}
+	p.root = root
+	return p, err
+}
+
 func newPathFromLexer(l *lexer) (*Path, error) {
 	lx := l.nextLexeme()
 
