@@ -1202,3 +1202,173 @@ another: entry`,
 		t.Fatalf("testcase(s) still focussed")
 	}
 }
+
+func TestFindAnchorsAndAliases(t *testing.T) {
+	cases := []struct {
+		name            string
+		input           string
+		path            string
+		expectedStrings []string
+	}{
+		{
+			name: "simple alias resolution",
+			input: `
+a: &anchor
+  value: 42
+b: *anchor
+`,
+			path:            "$.b.value",
+			expectedStrings: []string{"42\n"},
+		},
+		{
+			name: "alias inside sequence",
+			input: `
+defaults: &defaults
+  color: red
+items:
+  - name: item1
+    <<: *defaults
+  - name: item2
+    color: blue
+`,
+			path:            "$.items[0].color",
+			expectedStrings: []string{"red\n"},
+		},
+		{
+			name: "recursive alias reference",
+			input: `
+foo: &foo
+  bar: &bar
+    baz: 123
+ref: *foo
+`,
+			path:            "$.ref.bar.baz",
+			expectedStrings: []string{"123\n"},
+		},
+		{
+			name: "three deep alias chain resolves value",
+			input: `
+a: &base
+  key: value
+b: &b
+  <<: *base
+c: &c
+  <<: *b
+d: *c
+`,
+			path:            `$.d.key`,
+			expectedStrings: []string{"value\n"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var n yaml.Node
+			err := yaml.Unmarshal([]byte(tc.input), &n)
+			require.NoError(t, err)
+
+			p, err := yamlpath.NewPath(tc.path)
+			require.NoError(t, err)
+
+			actual, err := p.Find(&n)
+			require.NoError(t, err)
+
+			actualStrings := []string{}
+			for _, a := range actual {
+				var buf bytes.Buffer
+				e := yaml.NewEncoder(&buf)
+				e.SetIndent(2)
+				err = e.Encode(a)
+				require.NoError(t, err)
+				e.Close()
+				actualStrings = append(actualStrings, buf.String())
+			}
+
+			require.Equal(t, tc.expectedStrings, actualStrings)
+		})
+	}
+}
+
+func TestNewPathWithRoot_AliasResolution(t *testing.T) {
+	yamlData := `
+root: &shared
+  value: 42
+a: *shared
+b: *shared
+c:
+  nested: *shared
+`
+	var root yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &root))
+
+	// Path to 'a.value'
+	p1, err := yamlpath.NewPathWithRoot("$.a.value", &root)
+	require.NoError(t, err)
+	nodes1, err := p1.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes1, 1)
+	require.Equal(t, "42", nodes1[0].Value)
+
+	// Path to 'b.value'
+	p2, err := yamlpath.NewPathWithRoot("$.b.value", &root)
+	require.NoError(t, err)
+	nodes2, err := p2.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes2, 1)
+	require.Equal(t, "42", nodes2[0].Value)
+
+	// Path to 'c.nested.value'
+	p3, err := yamlpath.NewPathWithRoot("$.c.nested.value", &root)
+	require.NoError(t, err)
+	nodes3, err := p3.Find(&root)
+	require.NoError(t, err)
+	require.Len(t, nodes3, 1)
+	require.Equal(t, "42", nodes3[0].Value)
+}
+
+func TestFindOnChildNodesWithRoot(t *testing.T) {
+	yamlData := `
+root: &shared
+  value: 42
+a: *shared
+b: *shared
+c:
+  nested: *shared
+`
+	var root yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &root))
+
+	// Helper to find a mapping child by key
+	findChild := func(parent *yaml.Node, key string) *yaml.Node {
+		for i := 0; i < len(parent.Content); i += 2 {
+			if parent.Content[i].Value == key {
+				return parent.Content[i+1]
+			}
+		}
+		return nil
+	}
+
+	aNode := findChild(root.Content[0], "a")
+	bNode := findChild(root.Content[0], "b")
+	cNode := findChild(root.Content[0], "c")
+
+	p, err := yamlpath.NewPathWithRoot("$.value", &root)
+	require.NoError(t, err)
+
+	nodesA, err := p.Find(aNode)
+	require.NoError(t, err)
+	require.Len(t, nodesA, 1)
+	require.Equal(t, "42", nodesA[0].Value)
+
+	nodesB, err := p.Find(bNode)
+	require.NoError(t, err)
+	require.Len(t, nodesB, 1)
+	require.Equal(t, "42", nodesB[0].Value)
+
+	// For c.nested
+	nestedNode := findChild(cNode, "nested")
+	nodesC, err := p.Find(nestedNode)
+	require.NoError(t, err)
+	require.Len(t, nodesC, 1)
+	require.Equal(t, "42", nodesC[0].Value)
+}

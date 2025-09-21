@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath/internal"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -22,7 +23,6 @@ func TestNewFilter(t *testing.T) {
 		yamlDoc   string
 		rootDoc   string
 		match     bool
-		focus     bool // if true, run only tests with focus set to true
 	}{
 		{
 			name:      "no lexemes",
@@ -725,30 +725,128 @@ price: 8.95
 		},
 	}
 
-	focussed := false
 	for _, tc := range cases {
-		if tc.focus {
-			focussed = true
-			break
-		}
-	}
-
-	for _, tc := range cases {
-		if focussed && !tc.focus {
-			continue
-		}
 		t.Run(tc.name, func(t *testing.T) {
 			n := unmarshalDoc(t, tc.yamlDoc)
 			root := unmarshalDoc(t, tc.rootDoc)
 
 			parseTree := parseFilterString(tc.filter)
-			match := newFilter(parseTree)(n, root)
+			c := internal.NewCursor(n, internal.NewCursor(root, nil))
+			match := newFilter(parseTree)(c)
 			require.Equal(t, tc.match, match)
 		})
 	}
+}
 
-	if focussed {
-		t.Fatalf("testcase(s) still focussed")
+func TestAnchoredAliasedScalars(t *testing.T) {
+	cases := []struct {
+		name   string
+		doc    string
+		filter string
+		match  bool
+	}{
+		{
+			name: "string anchor equality via alias",
+			doc: `---
+a: &anchored 'x'
+b: *anchored
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+		{
+			name: "numeric anchor equality via alias",
+			doc: `---
+a: &one 1
+b: *one
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := unmarshalDoc(t, tc.doc)
+
+			rootCursor := internal.NewCursor(unmarshalDoc(t, ""), nil)
+			cursor := internal.NewCursor(n, rootCursor)
+			match := newFilter(parseFilterString(tc.filter))(cursor)
+			require.True(t, match)
+		})
+	}
+}
+
+func TestFilterTraversesAnchorsAndAliases(t *testing.T) {
+	cases := []struct {
+		name   string
+		doc    string
+		filter string
+		match  bool
+	}{
+		{
+			name: "alias references anchored string",
+			doc: `
+a: &str_anchor hello
+b: *str_anchor
+`,
+			filter: `@.a==@.b`,
+			match:  true,
+		},
+		{
+			name: "alias references anchored int",
+			doc: `
+x: &int_anchor 42
+y: *int_anchor
+`,
+			filter: `@.x==@.y`,
+			match:  true,
+		},
+		{
+			name: "alias does not match different anchor",
+			doc: `
+a: &one 1
+b: &two 2
+c: *one
+d: *two
+`,
+			filter: `@.c==@.d`,
+			match:  false,
+		},
+		{
+			name: "alias in sequence matches anchor",
+			doc: `
+seq:
+  - &anchored foo
+  - *anchored
+`,
+			filter: `@.seq[0]==@.seq[1]`,
+			match:  true,
+		},
+		{
+			name: "three deep alias chain resolves value",
+			doc: `
+a: &base
+  key: value
+b: &b
+  <<: *base
+c: &c
+  <<: *b
+d: *c
+`,
+			filter: `@.a.key==@.d.key`,
+			match:  true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n := unmarshalDoc(t, tc.doc)
+			rootCursor := internal.NewCursor(unmarshalDoc(t, ""), nil)
+			cursor := internal.NewCursor(n, rootCursor)
+			match := newFilter(parseFilterString(tc.filter))(cursor)
+			require.Equal(t, tc.match, match)
+		})
 	}
 }
 

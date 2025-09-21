@@ -1,9 +1,3 @@
-/*
- * Copyright 2020 VMware, Inc.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 package yamlpath
 
 import (
@@ -12,11 +6,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/vmware-labs/yaml-jsonpath/pkg/yamlpath/internal"
 	"go.yaml.in/yaml/v3"
 )
 
-type filter func(node, root *yaml.Node) bool
+// filter is a function type that determines whether a given *internal.Cursor satisfies a specific condition.
+type filter func(c *internal.Cursor) bool
 
+// newFilter creates and returns a filter based on the given filterNode parse tree.
+// It evaluates various filter conditions like comparison, logical operations, and path existence.
+// If the node is nil or unhandled, it defaults to a filter that always returns false.
 func newFilter(n *filterNode) filter {
 	if n == nil {
 		return never
@@ -25,8 +24,8 @@ func newFilter(n *filterNode) filter {
 	switch n.lexeme.typ {
 	case lexemeFilterAt, lexemeRoot:
 		path := pathFilterScanner(n)
-		return func(node, root *yaml.Node) bool {
-			return len(path(node, root)) > 0
+		return func(c *internal.Cursor) bool {
+			return len(path(c)) > 0
 		}
 
 	case lexemeFilterEquality, lexemeFilterInequality,
@@ -39,22 +38,22 @@ func newFilter(n *filterNode) filter {
 
 	case lexemeFilterNot:
 		f := newFilter(n.children[0])
-		return func(node, root *yaml.Node) bool {
-			return !f(node, root)
+		return func(c *internal.Cursor) bool {
+			return !f(c)
 		}
 
 	case lexemeFilterOr:
 		f1 := newFilter(n.children[0])
 		f2 := newFilter(n.children[1])
-		return func(node, root *yaml.Node) bool {
-			return f1(node, root) || f2(node, root)
+		return func(c *internal.Cursor) bool {
+			return f1(c) || f2(c)
 		}
 
 	case lexemeFilterAnd:
 		f1 := newFilter(n.children[0])
 		f2 := newFilter(n.children[1])
-		return func(node, root *yaml.Node) bool {
-			return f1(node, root) && f2(node, root)
+		return func(c *internal.Cursor) bool {
+			return f1(c) && f2(c)
 		}
 
 	case lexemeFilterBooleanLiteral:
@@ -62,7 +61,7 @@ func newFilter(n *filterNode) filter {
 		if err != nil {
 			panic(err) // should not happen
 		}
-		return func(node, root *yaml.Node) bool {
+		return func(c *internal.Cursor) bool {
 			return b
 		}
 
@@ -71,10 +70,14 @@ func newFilter(n *filterNode) filter {
 	}
 }
 
-func never(node, root *yaml.Node) bool {
+// never is a filter function that always returns false, regardless of the input cursor.
+func never(_ *internal.Cursor) bool {
 	return false
 }
 
+// comparisonFilter creates a filter function that evaluates comparison operations in a filterNode.
+// It ensures compatibility between operand types and performs type-specific comparisons.
+// The resulting filter function evaluates node values in the context of the given filterNode's operator.
 func comparisonFilter(n *filterNode) filter {
 	compare := func(b bool) bool {
 		var c comparison
@@ -102,14 +105,16 @@ func comparisonFilter(n *filterNode) filter {
 	})
 }
 
+// nodeToFilter converts a filterNode into a filter function that evaluates path-based comparisons using accept logic.
+// It retrieves paths from the node's children, evaluates each path against the other using the accept function, and returns a match.
 func nodeToFilter(n *filterNode, accept func(typedValue, typedValue) bool) filter {
 	lhsPath := newFilterScanner(n.children[0])
 	rhsPath := newFilterScanner(n.children[1])
-	return func(node, root *yaml.Node) (result bool) {
+	return func(c *internal.Cursor) (result bool) {
 		// perform a set-wise comparison of the values in each path
 		match := false
-		for _, l := range lhsPath(node, root) {
-			for _, r := range rhsPath(node, root) {
+		for _, l := range lhsPath(c) {
+			for _, r := range rhsPath(c) {
 				if !accept(l, r) {
 					return false
 				}
@@ -120,11 +125,13 @@ func nodeToFilter(n *filterNode, accept func(typedValue, typedValue) bool) filte
 	}
 }
 
+// equalBooleans compares two string values for boolean equivalence, ignoring case sensitivity.
 func equalBooleans(l, r string) bool {
 	// Note: the YAML parser and our JSONPath lexer both rule out invalid boolean literals such as tRue.
 	return strings.EqualFold(l, r)
 }
 
+// equalNulls compares two string representations of null values for equality without case sensitivity.
 func equalNulls(l, r string) bool {
 	// Note: the YAML parser and our JSONPath lexer both rule out invalid null literals such as nUll.
 	return true
@@ -132,12 +139,14 @@ func equalNulls(l, r string) bool {
 
 // filterScanner is a function that returns a slice of typed values from either a filter literal or a path expression
 // which refers to either the current node or the root node. It is used in filter comparisons.
-type filterScanner func(node, root *yaml.Node) []typedValue
+type filterScanner func(c *internal.Cursor) []typedValue
 
-func emptyScanner(*yaml.Node, *yaml.Node) []typedValue {
+// emptyScanner is a function that returns an empty slice of typedValue, typically used as a default or fallback scanner.
+func emptyScanner(_ *internal.Cursor) []typedValue {
 	return []typedValue{}
 }
 
+// newFilterScanner returns a filterScanner based on the provided filterNode, delegating to specialized scanners or defaulting.
 func newFilterScanner(n *filterNode) filterScanner {
 	switch {
 	case n == nil:
@@ -154,6 +163,9 @@ func newFilterScanner(n *filterNode) filterScanner {
 	}
 }
 
+// pathFilterScanner creates a filterScanner for a filterNode representing either '@' or '$' path expressions.
+// The scanner operates on the current cursor or root node, returning matched nodes from a generated path.
+// Panics if the provided filterNode does not have a valid precondition for path scanning.
 func pathFilterScanner(n *filterNode) filterScanner {
 	var at bool
 	switch n.lexeme.typ {
@@ -172,11 +184,13 @@ func pathFilterScanner(n *filterNode) filterScanner {
 	if err != nil {
 		return emptyScanner
 	}
-	return func(node, root *yaml.Node) []typedValue {
+	return func(c *internal.Cursor) []typedValue {
 		if at {
-			return values(path.Find(node))
+			nodes, err := path.Find(c.Node())
+			return values(c, nodes, err)
 		}
-		return values(path.Find(root))
+		nodes, err := path.Find(c.Root().Node())
+		return values(c, nodes, err)
 	}
 }
 
@@ -240,51 +254,65 @@ func typedValueOfNode(node *yaml.Node) typedValue {
 	}
 }
 
-//nolint:unused
-func newTypedValue(t valueType, v string) typedValue {
-	return typedValue{
-		typ: t,
-		val: v,
+// resolveAliasNode resolves alias nodes using the node's Alias pointer if present,
+// otherwise falls back to looking up anchors on the cursor's root alias map.
+// It follows alias chains up to a cap to avoid infinite loops.
+func resolveAliasNode(c *internal.Cursor, n *yaml.Node) *yaml.Node {
+	cur := n
+	const maxDepth = 16
+	for i := 0; cur != nil && cur.Kind == yaml.AliasNode && i < maxDepth; i++ {
+		if cur.Alias != nil {
+			cur = cur.Alias
+			continue
+		}
+		aliases := c.Aliases()
+		if aliases != nil {
+			if anchored, ok := aliases[cur.Value]; ok && anchored != nil {
+				cur = anchored
+				continue
+			}
+		}
+		// cannot resolve further
+		break
 	}
+	return cur
 }
 
-//nolint:unused
-func typedValueOfString(s string) typedValue {
-	return newTypedValue(stringValueType, s)
-}
-
-//nolint:unused
-func typedValueOfInt(i string) typedValue {
-	return newTypedValue(intValueType, i)
-}
-
-//nolint:unused
-func typedValueOfFloat(f string) typedValue {
-	return newTypedValue(floatValueType, f)
-}
-
-func values(nodes []*yaml.Node, err error) []typedValue {
+// values converts a list of YAML nodes into a slice of typedValue, resolving alias nodes and skipping nil nodes.
+// Panics if the provided error is non-nil, as this scenario should not occur.
+func values(c *internal.Cursor, nodes []*yaml.Node, err error) []typedValue {
 	if err != nil {
 		panic(fmt.Errorf("unexpected error: %v", err)) // should never happen
 	}
 	v := []typedValue{}
 	for _, n := range nodes {
-		v = append(v, typedValueOfNode(n))
+		if n == nil {
+			continue
+		}
+		resolved := resolveAliasNode(c, n)
+		if resolved == nil {
+			continue
+		}
+		v = append(v, typedValueOfNode(resolved))
 	}
 	return v
 }
 
+// literalFilterScanner creates a filterScanner that evaluates a literal value from the given filterNode's lexeme.
 func literalFilterScanner(n *filterNode) filterScanner {
 	v := n.lexeme.literalValue()
-	return func(node, root *yaml.Node) []typedValue {
+	return func(_ *internal.Cursor) []typedValue {
 		return []typedValue{v}
 	}
 }
 
+// matchRegularExpression converts a parse tree node into a filter that performs regex-based string comparisons.
 func matchRegularExpression(parseTree *filterNode) filter {
 	return nodeToFilter(parseTree, stringMatchesRegularExpression)
 }
 
+// stringMatchesRegularExpression checks if a string value matches a given regular expression and returns true if matched.
+// Returns false if the types of the inputs are not string and regular expression.
 func stringMatchesRegularExpression(s, expr typedValue) bool {
 	if s.typ != stringValueType || expr.typ != regularExpressionValueType {
 		return false // can't compare types so return false
