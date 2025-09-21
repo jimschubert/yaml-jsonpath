@@ -85,55 +85,6 @@ func (c *YAMLCache) LoadDocument(content []byte) (*YAMLDocument, error) {
 	}
 }
 
-// parseDocument parses YAML content and extracts aliases
-func (c *YAMLCache) parseDocument(content []byte) (*YAMLDocument, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(content, &root); err != nil {
-		return nil, err
-	}
-
-	// Extract aliases from the document
-	aliases := make(map[string]*yaml.Node)
-	c.extractAliases(&root, aliases)
-
-	return &YAMLDocument{
-		Root:    &root,
-		Aliases: aliases,
-	}, nil
-}
-
-// extractAliases walks the YAML tree and extracts all aliases
-func (c *YAMLCache) extractAliases(node *yaml.Node, aliases map[string]*yaml.Node) {
-	anchors := make(map[string]*yaml.Node)
-	c.walkNode(node, anchors, aliases)
-}
-
-// walkNode recursively walks the YAML node tree to find anchors and aliases
-func (c *YAMLCache) walkNode(node *yaml.Node, anchors map[string]*yaml.Node, aliases map[string]*yaml.Node) {
-	if node == nil {
-		return
-	}
-
-	// If this node has an anchor, store it
-	if node.Anchor != "" {
-		anchors[node.Anchor] = node
-		aliases[node.Anchor] = node
-	}
-
-	// If this is an alias node, resolve it
-	if node.Kind == yaml.AliasNode && node.Alias != nil {
-		aliasName := node.Value
-		if anchoredNode, exists := anchors[aliasName]; exists {
-			aliases[aliasName] = anchoredNode
-		}
-	}
-
-	// Recursively process child nodes
-	for _, child := range node.Content {
-		c.walkNode(child, anchors, aliases)
-	}
-}
-
 // GetDocument retrieves a cached document (may return nil if GC'd)
 func (c *YAMLCache) GetDocument(documentKey string) (*YAMLDocument, bool) {
 	if value, ok := c.documents.Load(documentKey); ok {
@@ -190,6 +141,12 @@ func (c *YAMLCache) CleanStaleEntries() int {
 	return removed
 }
 
+// extractAliases walks the YAML tree and extracts all aliases
+func (c *YAMLCache) extractAliases(node *yaml.Node, aliases map[string]*yaml.Node) {
+	anchors := make(map[string]*yaml.Node)
+	c.walkNode(node, anchors, aliases)
+}
+
 // hashContent creates a content hash for cache invalidation
 func hashContent(content []byte) string {
 	hash := sha256.Sum256(content)
@@ -217,4 +174,47 @@ func hashYAMLNode(node *yaml.Node) string {
 
 	sum := h.Sum64()
 	return fmt.Sprintf("%x", sum)
+}
+
+// parseDocument parses YAML content and extracts aliases
+func (c *YAMLCache) parseDocument(content []byte) (*YAMLDocument, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(content, &root); err != nil {
+		return nil, err
+	}
+
+	// Extract aliases from the document
+	aliases := make(map[string]*yaml.Node)
+	c.extractAliases(&root, aliases)
+
+	return &YAMLDocument{
+		Root:    &root,
+		Aliases: aliases,
+	}, nil
+}
+
+// walkNode recursively walks the YAML node tree to find anchors and aliases
+func (c *YAMLCache) walkNode(node *yaml.Node, anchors map[string]*yaml.Node, aliases map[string]*yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	// If this node has an anchor, store it
+	if node.Anchor != "" {
+		anchors[node.Anchor] = node
+		aliases[node.Anchor] = node
+	}
+
+	// If this is an alias node, resolve it
+	if node.Kind == yaml.AliasNode && node.Alias != nil {
+		aliasName := node.Value
+		if anchoredNode, exists := anchors[aliasName]; exists {
+			aliases[aliasName] = anchoredNode
+		}
+	}
+
+	// Recursively process child nodes
+	for _, child := range node.Content {
+		c.walkNode(child, anchors, aliases)
+	}
 }
