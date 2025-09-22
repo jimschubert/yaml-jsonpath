@@ -1372,3 +1372,74 @@ c:
 	require.Len(t, nodesC, 1)
 	require.Equal(t, "42", nodesC[0].Value)
 }
+
+func TestFindStoreBookGenres(t *testing.T) {
+	yamlData := `
+defaults:
+  genres:
+    fiction: &fiction
+      genre: Fiction
+    science-fiction: &science-fiction
+      genre: Science Fiction
+    fantasy: &fantasy
+      genre: Fantasy
+  hemingway: &hemingway
+    author: Ernest Hemingway
+store:
+  book: &books
+    - <<: [*hemingway, *fiction]
+      title: The Old Man and the Sea
+    - <<: [*hemingway, *fiction]
+      title: For Whom the Bell Tolls
+    - <<: [*hemingway, *fiction]
+      title: To Have and Have Not
+      <<: *fiction
+    - author: Fyodor Mikhailovich Dostoevsky
+      title: Crime and Punishment
+      <<: *fiction
+    - author: Jane Austen
+      title: Sense and Sensibility
+      <<: *fiction
+    - author: Kurt Vonnegut Jr.
+      title: Slaughterhouse-Five
+      <<: *science-fiction
+    - author: J. R. R. Tolkien
+      title: The Lord of the Rings
+      <<: *fantasy
+  audiobooks:
+    - *books
+    - author: Stephen "Steve-O" Glover
+      title: 'Professional Idiot: A Memoir'
+`
+
+	var root yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(yamlData), &root))
+
+	p, err := yamlpath.NewPathWithRoot("$.store.book[*].genre", &root)
+	require.NoError(t, err)
+
+	actualNodes, err := p.Find(&root)
+	require.NoError(t, err)
+
+	actualStrings := []string{}
+	for _, a := range actualNodes {
+		var buf bytes.Buffer
+		e := yaml.NewEncoder(&buf)
+		e.SetIndent(2)
+		require.NoError(t, e.Encode(a))
+		e.Close()
+		actualStrings = append(actualStrings, buf.String())
+	}
+
+	expected := []string{
+		"Fiction\n",
+		"Fiction\n",
+		"Fiction\n",
+		"Fiction\n",
+		"Fiction\n",
+		"Science Fiction\n",
+		"Fantasy\n",
+	}
+
+	require.Equal(t, expected, actualStrings)
+}

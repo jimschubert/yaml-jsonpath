@@ -211,7 +211,9 @@ func identity(c *internal.Cursor) iter.Seq[*internal.Cursor] {
 	return lift(c)
 }
 
-// lift resolves and normalizes the provided cursors by evaluating aliases and merge keys, returning a sequence of results.
+// lift resolves and normalizes the provided cursors by evaluating aliases and merge keys,
+// honoring YAML merge semantics (sequence merges are evaluated right-to-left so the left-most
+// mapping wins). Cycle protection prevents infinite loops.
 func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 	resolved := make([]*internal.Cursor, 0, len(cursors))
 
@@ -220,10 +222,10 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 			continue
 		}
 
-		// Repeat resolution until no further alias/merge redirection occurs.
-		// Limit to a reasonable number of iterations to avoid infinite loops.
-		const maxIterations = 16
+		const maxIterations = 64
 		iteration := 0
+		visited := map[*yaml.Node]bool{}
+
 		for {
 			if iteration >= maxIterations {
 				break
@@ -231,70 +233,95 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 			iteration++
 
 			node := cur.Node()
-			changed := false
+			if node == nil {
+				break
+			}
+			// cycle protection for nodes already seen while resolving this cursor
+			if visited[node] {
+				break
+			}
+			visited[node] = true
 
-			// Resolve alias chains
+			changed := false
+			aliases := cur.Root().Aliases()
+
+			// Resolve alias chains (prefer the Alias pointer when present)
 			if node.Kind == yaml.AliasNode {
-				if aliases := cur.Root().Aliases(); aliases != nil {
-					if anchored, ok := aliases[node.Value]; ok && anchored != nil {
-						for anchored.Kind == yaml.AliasNode {
+				var anchored *yaml.Node
+				if node.Alias != nil {
+					anchored = node.Alias
+				} else if aliases != nil {
+					if a, ok := aliases[node.Value]; ok && a != nil {
+						anchored = a
+					}
+				}
+
+				if anchored != nil {
+					// unwrap chained anchors/aliases
+					for anchored.Kind == yaml.AliasNode {
+						if anchored.Alias != nil {
+							anchored = anchored.Alias
+						} else if aliases != nil {
 							if next, ok := aliases[anchored.Value]; ok && next != nil {
 								anchored = next
 							} else {
 								break
 							}
+						} else {
+							break
 						}
-						cur = internal.NewCursor(anchored, cur.Parent())
-						changed = true
-						// continue outer loop to re-evaluate the new node
 					}
+					cur = internal.NewCursor(anchored, cur.Parent())
+					changed = true
 				}
 			}
 
 			// Normalize merge key '<<' by selecting a mapping source (resolve alias/sequence cases)
 			if !changed && node.Kind == yaml.MappingNode && len(node.Content) > 0 {
-				for j := 0; j < len(node.Content); j += 2 {
+				for j := 0; j+1 < len(node.Content); j += 2 {
 					if node.Content[j].Value != "<<" {
 						continue
 					}
 					mergeNode := node.Content[j+1]
-					aliases := cur.Root().Aliases()
 
-					// merge is an alias -> resolve via alias map
-					if mergeNode.Kind == yaml.AliasNode && aliases != nil {
-						if anchored, ok := aliases[mergeNode.Value]; ok && anchored != nil {
-							for anchored.Kind == yaml.AliasNode {
-								if next, ok := aliases[anchored.Value]; ok && next != nil {
-									anchored = next
+					// helper to resolve an alias-like node to a mapping (unwrapping anchors/aliases)
+					resolveToMapping := func(n *yaml.Node) *yaml.Node {
+						if n == nil {
+							return nil
+						}
+						// If this node already points to the concrete mapping via Alias pointer
+						if n.Kind == yaml.AliasNode && n.Alias != nil {
+							n = n.Alias
+						} else if n.Kind == yaml.AliasNode && aliases != nil {
+							// If it's an alias by name, consult the aliases map
+							if a, ok := aliases[n.Value]; ok && a != nil {
+								n = a
+							}
+						}
+						// unwrap chained alias nodes
+						for n != nil && n.Kind == yaml.AliasNode {
+							if n.Alias != nil {
+								n = n.Alias
+							} else if aliases != nil {
+								if next, ok := aliases[n.Value]; ok && next != nil {
+									n = next
 								} else {
 									break
 								}
-							}
-							if anchored.Kind == yaml.MappingNode {
-								cur = internal.NewCursor(anchored, cur.Parent())
-								changed = true
+							} else {
 								break
 							}
 						}
-						continue
+						if n != nil && n.Kind == yaml.MappingNode {
+							return n
+						}
+						return nil
 					}
 
-					// merge is a sequence -> pick first mapping-like source (resolve aliases inside)
-					if mergeNode.Kind == yaml.SequenceNode {
-						var chosen *yaml.Node
-						for _, item := range mergeNode.Content {
-							if item.Kind == yaml.AliasNode && aliases != nil {
-								if a, ok := aliases[item.Value]; ok && a != nil && a.Kind == yaml.MappingNode {
-									chosen = a
-									break
-								}
-							} else if item.Kind == yaml.MappingNode {
-								chosen = item
-								break
-							}
-						}
-						if chosen != nil {
-							cur = internal.NewCursor(chosen, cur.Parent())
+					// merge is a direct alias -> resolve to mapping
+					if mergeNode.Kind == yaml.AliasNode {
+						if anchored := resolveToMapping(mergeNode); anchored != nil {
+							cur = internal.NewCursor(anchored, cur.Parent())
 							changed = true
 							break
 						}
@@ -306,6 +333,33 @@ func lift(cursors ...*internal.Cursor) iter.Seq[*internal.Cursor] {
 						cur = internal.NewCursor(mergeNode, cur.Parent())
 						changed = true
 						break
+					}
+
+					// merge is a sequence -> iterate right-to-left so the right-most mapping wins
+					if mergeNode.Kind == yaml.SequenceNode {
+						var chosen *yaml.Node
+						for k := len(mergeNode.Content) - 1; k >= 0; k-- {
+							item := mergeNode.Content[k]
+							if item == nil {
+								continue
+							}
+							switch item.Kind {
+							case yaml.AliasNode, yaml.MappingNode:
+								if m := resolveToMapping(item); m != nil {
+									chosen = m
+									// first match from right wins, break out, but use k since 'break' relates here to switch
+									k = -1
+								}
+							default:
+								// ignore other kinds
+							}
+						}
+						if chosen != nil {
+							cur = internal.NewCursor(chosen, cur.Parent())
+							changed = true
+							break
+						}
+						continue
 					}
 				}
 			}
@@ -428,6 +482,7 @@ func childThen(childName string, p *Path) *Path {
 		if node.Kind != yaml.MappingNode {
 			return empty()
 		}
+		// direct explicit lookup first (preserve local values)
 		for i, n := range node.Content {
 			if i%2 == 0 && n.Value == childName {
 				childNode := node.Content[i+1]
@@ -435,6 +490,8 @@ func childThen(childName string, p *Path) *Path {
 				return compose(lift(childCursor), p)
 			}
 		}
+
+		// nothing found
 		return empty()
 	})
 }
